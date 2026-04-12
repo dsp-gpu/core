@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
-project(DspCore VERSION 0.1.0 LANGUAGES CXX HIP)
+project(DspCore VERSION 0.1.0
+  DESCRIPTION "GPU driver, profiler and backend abstraction"
+  LANGUAGES CXX HIP)
 
 # ── Опции ──────────────────────────────────────────────────────────
 option(DSP_CORE_BUILD_TESTS    "Build tests"            ON)

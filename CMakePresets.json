@@ -7,7 +7,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
@@ -18,6 +19,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_PREFIX_PATH": "/opt/rocm",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_ROCM": "1"
       }
     },
@@ -35,5 +37,10 @@
     { "name": "local-dev",        "configurePreset": "local-dev"        },
     { "name": "debian-local-dev", "configurePreset": "debian-local-dev" },
     { "name": "ci",               "configurePreset": "ci"               }
+  ],
+  "testPresets": [
+    { "name": "local-dev",        "configurePreset": "local-dev",        "output": { "outputOnFailure": true } },
+    { "name": "debian-local-dev", "configurePreset": "debian-local-dev", "output": { "outputOnFailure": true } },
+    { "name": "ci",               "configurePreset": "ci",               "output": { "outputOnFailure": true } }
   ]
 }
