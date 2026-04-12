@@ -15,16 +15,49 @@ add_library(DspCore STATIC)
 add_library(DspCore::DspCore ALIAS DspCore)
 
 target_sources(DspCore PRIVATE
-  # Phase 1 skeleton — sources added in Phase 2
+  # Core
+  src/drv_gpu.cpp
+  src/gpu_context.cpp
+  src/gpu_kernel_op.cpp
+  src/module_registry.cpp
+  # Config
+  src/config/gpu_config.cpp
+  # Backends — OpenCL
+  src/backends/opencl/opencl_backend.cpp
+  src/backends/opencl/opencl_core.cpp
+  src/backends/opencl/opencl_profiling.cpp
+  src/backends/opencl/command_queue_pool.cpp
+  # Backends — ROCm
+  src/backends/rocm/rocm_backend.cpp
+  src/backends/rocm/rocm_core.cpp
+  src/backends/rocm/stream_pool.cpp
+  src/backends/rocm/zero_copy_bridge.cpp
+  # Backends — Hybrid
+  src/backends/hybrid/hybrid_backend.cpp
+  # Logger
+  src/logger/logger.cpp
+  src/logger/default_logger.cpp
+  src/logger/config_logger.cpp
+  # Memory
+  src/memory/memory_manager.cpp
+  # Services
+  src/services/batch_manager.cpp
+  src/services/kernel_cache_service.cpp
+  src/services/filter_config_service.cpp
+  src/services/storage/file_storage_backend.cpp
 )
 
 target_include_directories(DspCore
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    # Позволяет: #include "services/gpu_profiler.hpp" вместо "dsp/services/..."
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/dsp>
     $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/dsp>
   PRIVATE
     kernels/
     src
+    src/config
 )
 target_link_libraries(DspCore PUBLIC hip::host OpenCL::OpenCL)
 target_compile_features(DspCore PUBLIC cxx_std_17)
