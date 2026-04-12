@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "description": "GPU Configuration for DrvGPU",
+  "gpus": [
+    {
+      "id": 0,
+      "name": "GPU test",
+      "is_prof": true,
+      "is_logger": true,
+      "is_console": true,
+      "is_active": true,
+      "is_db": false
+    }
+  ]
+}
