@@ -104,6 +104,14 @@ install(FILES
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DspCore
 )
 
+# ── Конфигурационные файлы ─────────────────────────────────────────
+# configGPU.json копируется в build/ — тесты ищут его рядом с exe
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/configGPU.json
+  ${CMAKE_CURRENT_BINARY_DIR}/configGPU.json
+  COPYONLY
+)
+
 # ── Тесты ──────────────────────────────────────────────────────────
 if(DSP_CORE_BUILD_TESTS)
   add_subdirectory(tests)

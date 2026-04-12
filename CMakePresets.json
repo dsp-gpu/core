@@ -11,6 +11,17 @@
       }
     },
     {
+      "name": "debian-local-dev",
+      "displayName": "Debian Local (ROCm, ~/dsp-gpu/)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "/opt/rocm",
+        "ENABLE_ROCM": "1"
+      }
+    },
+    {
       "name": "ci",
       "displayName": "CI Build",
       "generator": "Ninja",
@@ -21,7 +32,8 @@
     }
   ],
   "buildPresets": [
-    { "name": "local-dev", "configurePreset": "local-dev" },
-    { "name": "ci",        "configurePreset": "ci" }
+    { "name": "local-dev",        "configurePreset": "local-dev"        },
+    { "name": "debian-local-dev", "configurePreset": "debian-local-dev" },
+    { "name": "ci",               "configurePreset": "ci"               }
   ]
 }
