@@ -54,6 +54,8 @@ target_include_directories(DspCore
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     # Позволяет: #include "services/gpu_profiler.hpp" вместо "dsp/services/..."
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/dsp>
+    # Сгенерированные файлы версии (version.h)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:include>
     $<INSTALL_INTERFACE:include/dsp>
   PRIVATE
@@ -87,6 +89,12 @@ install(DIRECTORY include/
 install(DIRECTORY test_utils/include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dsp/test
 )
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DspCore
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/version.json"
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/DspCore
+)
 
 include(CMakePackageConfigHelpers)
 configure_package_config_file(cmake/DspCoreConfig.cmake.in
@@ -105,6 +113,24 @@ install(FILES
   "${CMAKE_CURRENT_BINARY_DIR}/DspCoreConfigVersion.cmake"
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DspCore
 )
+
+# ── Git Version ────────────────────────────────────────────────────
+find_package(Git QUIET)
+if(NOT GIT_EXECUTABLE)
+    set(GIT_EXECUTABLE git)
+endif()
+
+add_custom_target(git_version_DspCore ALL
+    COMMAND ${CMAKE_COMMAND}
+        -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+        -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -D GIT_EXECUTABLE=${GIT_EXECUTABLE}
+        -D MODULE_PREFIX=DSPCORE
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake
+    COMMENT "[DspCore] Checking git version..."
+    VERBATIM
+)
+add_dependencies(DspCore git_version_DspCore)
 
 # ── Конфигурационные файлы ─────────────────────────────────────────
 # configGPU.json копируется в build/ — тесты ищут его рядом с exe
