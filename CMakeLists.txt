@@ -69,6 +69,13 @@ target_include_directories(DspCore
 target_link_libraries(DspCore PUBLIC hip::host OpenCL::OpenCL)
 target_compile_features(DspCore PUBLIC cxx_std_17)
 
+# Прокинуть ENABLE_ROCM=1 в код DspCore (нужно для #if ENABLE_ROCM
+# блоков в hybrid_backend.cpp / opencl_backend.cpp / тестах).
+# PUBLIC — чтобы клиенты ядра (spectrum/stats/...) тоже видели макрос.
+if(ENABLE_ROCM)
+  target_compile_definitions(DspCore PUBLIC ENABLE_ROCM=1)
+endif()
+
 # ── TestUtils — ОТДЕЛЬНАЯ target (не протекает в публичный API) ────
 add_library(DspCoreTestUtils INTERFACE)
 add_library(DspCore::TestUtils ALIAS DspCoreTestUtils)
