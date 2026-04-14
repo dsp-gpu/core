@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 #include "test_result.hpp"
-#include "DrvGPU/services/console_output.hpp"
+#include <core/services/console_output.hpp>
 
 namespace gpu_test_utils {
 

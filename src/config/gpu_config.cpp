@@ -1,18 +1,21 @@
 /**
  * @file gpu_config.cpp
- * @brief Реализация GPUConfig — менеджер конфигурации GPU на основе JSON
+ * @brief Реализация GPUConfig — менеджер конфигурации GPU
  *
  * ============================================================================
- * ЗАМЕТКИ ПО РЕАЛИЗАЦИИ:
+ * АРХИТЕКТУРА (после рефакторинга 2026-04-14):
  *
- * Стратегия десериализации JSON:
- *   Используется nlohmann/json с методом value() для опциональных полей.
- *   value(key, default) возвращает default, если ключ отсутствует.
- *   Это обеспечивает прямую совместимость при добавлении новых полей.
+ *   GPUConfig не зависит от конкретного JSON-парсера. Использует только
+ *   IConfigReader / IConfigWriter (абстракции) + ConfigSerializerFactory
+ *   для создания конкретной реализации.
+ *
+ *   Замена nlohmann → rapidjson / yaml-cpp / toml11 сводится к замене ОДНОГО
+ *   файла (`src/config/json_config_serializer.cpp`) — GPUConfig не трогаем.
+ *
+ *   Паттерны: SOLID (DIP), GoF (Factory Method, Composite).
  *
  * Потокобезопасность:
  *   Все публичные методы захватывают mutex перед доступом к data_.
- *   Методы только для чтения используют const lock мьютекса.
  *
  * Обработка ошибок:
  *   - Ошибки разбора: логируются в stderr, возвращается false
@@ -22,103 +25,67 @@
  *
  * @author Codo (AI Assistant)
  * @date 2026-02-07
+ * @modified 2026-04-14 (nlohmann → IConfigReader/Writer через фабрику)
  */
 
-#include "gpu_config.hpp"
+#include <core/config/gpu_config.hpp>
 
-// nlohmann/json — header-only библиотека JSON
-#include "../../third_party/nlohmann/json.hpp"
+#include <core/config/config_serializer_factory.hpp>
+#include <core/interface/i_config_reader.hpp>
+#include <core/interface/i_config_writer.hpp>
 
-#include <fstream>
 #include <iostream>
-#include <iomanip>
-#include <sstream>
 #include <filesystem>
 
 namespace fs = std::filesystem;
-using json = nlohmann::json;
 
 namespace drv_gpu_lib {
 
 // ============================================================================
-// Вспомогательные функции сериализации / десериализации JSON
+// Вспомогательные функции (работают через абстракции, а не через json)
 // ============================================================================
 
-/**
- * @brief Десериализовать GPUConfigEntry из JSON-объекта
- *
- * Используется value() с значениями по умолчанию для КАЖДОГО поля.
- * Если поле отсутствует в JSON, подставляется значение по умолчанию из GPUConfigEntry.
- *
- * Пример:
- *   JSON: { "id": 1, "name": "Evgeni" }
- *   Результат: { id=1, name="Evgeni", is_prof=false, is_logger=false, ... }
- */
-static GPUConfigEntry ParseGPUEntry(const json& j) {
+/// Прочитать одну запись GPUConfigEntry из sub-reader'а (один элемент массива).
+static GPUConfigEntry ParseGPUEntry(const IConfigReader& reader) {
     GPUConfigEntry entry;
 
     // Идентификация
-    entry.id                = j.value("id", entry.id);
-    entry.name              = j.value("name", entry.name);
+    entry.id                = reader.GetInt   ("id",                  entry.id);
+    entry.name              = reader.GetString("name",                entry.name);
 
-    // Флаги возможностей (по умолчанию false)
-    entry.is_prof           = j.value("is_prof", entry.is_prof);
-    entry.is_logger         = j.value("is_logger", entry.is_logger);
-    entry.is_console        = j.value("is_console", entry.is_console);
-    entry.is_active         = j.value("is_active", entry.is_active);
-    entry.is_db             = j.value("is_db", entry.is_db);
+    // Флаги возможностей
+    entry.is_prof           = reader.GetBool  ("is_prof",             entry.is_prof);
+    entry.is_logger         = reader.GetBool  ("is_logger",           entry.is_logger);
+    entry.is_console        = reader.GetBool  ("is_console",          entry.is_console);
+    entry.is_active         = reader.GetBool  ("is_active",           entry.is_active);
+    entry.is_db             = reader.GetBool  ("is_db",               entry.is_db);
 
     // Лимиты ресурсов
-    entry.max_memory_percent = j.value("max_memory_percent", entry.max_memory_percent);
+    entry.max_memory_percent = static_cast<size_t>(
+        reader.GetInt("max_memory_percent",
+                      static_cast<int>(entry.max_memory_percent)));
 
-    // Настройки логирования
-    entry.log_level         = j.value("log_level", entry.log_level);
+    // Настройки логирования — уровень лога как строка ("DEBUG"/"INFO"/...)
+    entry.log_level         = reader.GetString("log_level",           entry.log_level);
 
     return entry;
 }
 
-/**
- * @brief Сериализовать GPUConfigEntry в JSON-объект
- *
- * Записывает ВСЕ поля в JSON (включая значения по умолчанию).
- * Это делает файл конфигурации самодокументируемым.
- */
-static json SerializeGPUEntry(const GPUConfigEntry& entry) {
-    json j;
-
-    j["id"]                 = entry.id;
-    j["name"]               = entry.name;
-    j["is_prof"]            = entry.is_prof;
-    j["is_logger"]          = entry.is_logger;
-    j["is_console"]         = entry.is_console;
-    j["is_active"]          = entry.is_active;
-    j["is_db"]              = entry.is_db;
-    j["max_memory_percent"] = entry.max_memory_percent;
-    j["log_level"]          = entry.log_level;
-
-    return j;
-}
-
-/**
- * @brief Сериализовать полные GPUConfigData в JSON
- */
-static json SerializeConfigData(const GPUConfigData& data) {
-    json root;
-
-    root["version"]     = data.version;
-    root["description"] = data.description;
-
-    json gpus_array = json::array();
-    for (const auto& entry : data.gpus) {
-        gpus_array.push_back(SerializeGPUEntry(entry));
-    }
-    root["gpus"] = gpus_array;
-
-    return root;
+/// Записать одну запись GPUConfigEntry в sub-writer (элемент массива).
+static void SerializeGPUEntry(IConfigWriter& writer, const GPUConfigEntry& entry) {
+    writer.SetInt   ("id",                 entry.id);
+    writer.SetString("name",               entry.name);
+    writer.SetBool  ("is_prof",            entry.is_prof);
+    writer.SetBool  ("is_logger",          entry.is_logger);
+    writer.SetBool  ("is_console",         entry.is_console);
+    writer.SetBool  ("is_active",          entry.is_active);
+    writer.SetBool  ("is_db",              entry.is_db);
+    writer.SetInt   ("max_memory_percent", static_cast<int>(entry.max_memory_percent));
+    writer.SetString("log_level",          entry.log_level);
 }
 
 // ============================================================================
-// Реализация Singleton
+// Singleton
 // ============================================================================
 
 GPUConfig& GPUConfig::GetInstance() {
@@ -127,7 +94,6 @@ GPUConfig& GPUConfig::GetInstance() {
 }
 
 GPUConfig::GPUConfig() {
-    // Инициализация конфигом по умолчанию
     data_ = CreateDefaultConfig();
 }
 
@@ -138,65 +104,50 @@ GPUConfig::GPUConfig() {
 bool GPUConfig::Load(const std::string& file_path) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    try {
-        // Открыть и разобрать JSON-файл
-        std::ifstream file(file_path);
-        if (!file.is_open()) {
-            std::cerr << "[GPUConfig] ERROR: Cannot open file: " << file_path << "\n";
-            return false;
-        }
-
-        json root = json::parse(file);
-
-        // Разбор корневых полей
-        GPUConfigData new_data;
-        new_data.version     = root.value("version", new_data.version);
-        new_data.description = root.value("description", new_data.description);
-
-        // Разбор записей GPU
-        if (root.contains("gpus") && root["gpus"].is_array()) {
-            for (const auto& gpu_json : root["gpus"]) {
-                new_data.gpus.push_back(ParseGPUEntry(gpu_json));
-            }
-        }
-
-        // Проверка: хотя бы один GPU
-        if (new_data.gpus.empty()) {
-            std::cerr << "[GPUConfig] WARNING: No GPUs in config, adding default\n";
-            GPUConfigEntry default_gpu;
-            default_gpu.id = 0;
-            default_gpu.name = "TEST";
-            default_gpu.is_prof = true;
-            default_gpu.is_logger = true;
-            new_data.gpus.push_back(default_gpu);
-        }
-
-        // Применить
-        data_ = std::move(new_data);
-        file_path_ = file_path;
-        loaded_ = true;
-
-        std::cout << "[GPUConfig] Loaded " << data_.gpus.size()
-                  << " GPU config(s) from: " << file_path << "\n";
-
-        return true;
-
-    } catch (const json::parse_error& e) {
-        std::cerr << "[GPUConfig] JSON parse error: " << e.what() << "\n";
-        return false;
-    } catch (const std::exception& e) {
-        std::cerr << "[GPUConfig] Load error: " << e.what() << "\n";
+    // DIP: зависим от абстракции, фабрика скрывает что внутри nlohmann.
+    auto reader = ConfigSerializerFactory::CreateJsonReader();
+    if (!reader || !reader->LoadFromFile(file_path)) {
+        std::cerr << "[GPUConfig] ERROR: Cannot load file: " << file_path << "\n";
         return false;
     }
+
+    GPUConfigData new_data;
+    new_data.version     = reader->GetString("version",     new_data.version);
+    new_data.description = reader->GetString("description", new_data.description);
+
+    // Composite: массив gpus — вектор sub-reader'ов на элементы
+    for (const auto& gpu_reader : reader->GetArray("gpus")) {
+        if (gpu_reader) {
+            new_data.gpus.push_back(ParseGPUEntry(*gpu_reader));
+        }
+    }
+
+    // Защита: хотя бы один GPU
+    if (new_data.gpus.empty()) {
+        std::cerr << "[GPUConfig] WARNING: No GPUs in config, adding default\n";
+        GPUConfigEntry default_gpu;
+        default_gpu.id        = 0;
+        default_gpu.name      = "TEST";
+        default_gpu.is_prof   = true;
+        default_gpu.is_logger = true;
+        new_data.gpus.push_back(default_gpu);
+    }
+
+    data_ = std::move(new_data);
+    file_path_ = file_path;
+    loaded_ = true;
+
+    std::cout << "[GPUConfig] Loaded " << data_.gpus.size()
+              << " GPU config(s) from: " << file_path << "\n";
+
+    return true;
 }
 
 bool GPUConfig::LoadOrCreate(const std::string& file_path) {
-    // Попытка загрузить существующий файл
     if (fs::exists(file_path)) {
         return Load(file_path);
     }
 
-    // Файл не найден — создаём конфиг по умолчанию
     std::cout << "[GPUConfig] Config file not found, creating default: " << file_path << "\n";
 
     {
@@ -206,7 +157,6 @@ bool GPUConfig::LoadOrCreate(const std::string& file_path) {
         loaded_ = true;
     }
 
-    // Сохранить конфиг по умолчанию в файл
     return Save(file_path);
 }
 
@@ -219,37 +169,32 @@ bool GPUConfig::Save(const std::string& file_path) {
         return false;
     }
 
-    try {
-        // Создать родительские директории при необходимости
-        fs::path dir = fs::path(path).parent_path();
-        if (!dir.empty() && !fs::exists(dir)) {
-            fs::create_directories(dir);
+    // DIP: через фабрику — nlohmann невиден
+    auto writer = ConfigSerializerFactory::CreateJsonWriter();
+    if (!writer) return false;
+
+    writer->SetString("version",     data_.version);
+    writer->SetString("description", data_.description);
+
+    // Composite: массив gpus — для каждого GPU получаем sub-writer и заполняем
+    for (const auto& entry : data_.gpus) {
+        auto gpu_writer = writer->AppendArrayItem("gpus");
+        if (gpu_writer) {
+            SerializeGPUEntry(*gpu_writer, entry);
         }
+    }
 
-        // Сериализация в JSON
-        json root = SerializeConfigData(data_);
-
-        // Запись в файл (с отступами в 2 пробела)
-        std::ofstream file(path);
-        if (!file.is_open()) {
-            std::cerr << "[GPUConfig] ERROR: Cannot create file: " << path << "\n";
-            return false;
-        }
-
-        file << root.dump(2) << "\n";
-        file.close();
-
-        file_path_ = path;
-
-        std::cout << "[GPUConfig] Saved " << data_.gpus.size()
-                  << " GPU config(s) to: " << path << "\n";
-
-        return true;
-
-    } catch (const std::exception& e) {
-        std::cerr << "[GPUConfig] Save error: " << e.what() << "\n";
+    if (!writer->SaveToFile(path)) {
+        std::cerr << "[GPUConfig] ERROR: Cannot save file: " << path << "\n";
         return false;
     }
+
+    file_path_ = path;
+
+    std::cout << "[GPUConfig] Saved " << data_.gpus.size()
+              << " GPU config(s) to: " << path << "\n";
+
+    return true;
 }
 
 bool GPUConfig::IsLoaded() const {
@@ -269,7 +214,6 @@ const GPUConfigEntry& GPUConfig::GetConfig(int gpu_id) const {
         return *found;
     }
 
-    // Вернуть запись по умолчанию с запрошенным id
     default_entry_ = GPUConfigEntry();
     default_entry_.id = gpu_id;
     return default_entry_;
@@ -299,28 +243,24 @@ std::vector<int> GPUConfig::GetActiveGPUIDs() const {
 
 bool GPUConfig::IsProfilingEnabled(int gpu_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
-
     const GPUConfigEntry* found = FindConfig(gpu_id);
     return found ? found->is_prof : false;
 }
 
 bool GPUConfig::IsLoggingEnabled(int gpu_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
-
     const GPUConfigEntry* found = FindConfig(gpu_id);
     return found ? found->is_logger : false;
 }
 
 bool GPUConfig::IsConsoleEnabled(int gpu_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
-
     const GPUConfigEntry* found = FindConfig(gpu_id);
     return found ? found->is_console : false;
 }
 
 size_t GPUConfig::GetMaxMemoryPercent(int gpu_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
-
     const GPUConfigEntry* found = FindConfig(gpu_id);
     return found ? found->max_memory_percent : 70;
 }
@@ -332,7 +272,6 @@ size_t GPUConfig::GetMaxMemoryPercent(int gpu_id) const {
 void GPUConfig::SetConfig(const GPUConfigEntry& entry) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // Найти существующую запись с тем же id
     for (auto& existing : data_.gpus) {
         if (existing.id == entry.id) {
             existing = entry;
@@ -340,7 +279,6 @@ void GPUConfig::SetConfig(const GPUConfigEntry& entry) {
         }
     }
 
-    // Не найдено — добавить новую запись
     data_.gpus.push_back(entry);
 }
 
@@ -395,7 +333,6 @@ GPUConfigData GPUConfig::CreateDefaultConfig() const {
     data.version = "1.0";
     data.description = "GPU Configuration for DrvGPU";
 
-    // По умолчанию: один GPU с включённым профилированием и логированием
     GPUConfigEntry default_gpu;
     default_gpu.id = 0;
     default_gpu.name = "TEST";

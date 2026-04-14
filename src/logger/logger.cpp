@@ -1,4 +1,5 @@
-#include "logger.hpp"
+#include <core/logger/logger.hpp>
+#include "default_logger.hpp"   // PRIVATE: только реализация фасада знает о DefaultLogger
 
 namespace drv_gpu_lib {
 

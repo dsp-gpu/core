@@ -24,6 +24,7 @@ target_sources(DspCore PRIVATE
   src/module_registry.cpp
   # Config
   src/config/gpu_config.cpp
+  src/config/json_config_serializer.cpp
   # Backends — OpenCL
   src/backends/opencl/opencl_backend.cpp
   src/backends/opencl/opencl_core.cpp
@@ -51,17 +52,19 @@ target_sources(DspCore PRIVATE
 
 target_include_directories(DspCore
   PUBLIC
+    # Стандарт AMD: #include <core/services/gpu_profiler.hpp>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    # Позволяет: #include "services/gpu_profiler.hpp" вместо "dsp/services/..."
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/dsp>
     # Сгенерированные файлы версии (version.h)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:include>
-    $<INSTALL_INTERFACE:include/dsp>
   PRIVATE
     kernels/
     src
     src/config
+    # Third-party libs — спрятаны через обёртки (Factory + PIMPL),
+    # клиенты ядра (spectrum/stats/...) их НЕ видят.
+    third_party/plog/include      # plog:     #include <plog/Log.h>             → src/logger/default_logger.cpp
+    third_party                   # nlohmann: #include <nlohmann/json.hpp>      → src/config/json_config_serializer.cpp
 )
 target_link_libraries(DspCore PUBLIC hip::host OpenCL::OpenCL)
 target_compile_features(DspCore PUBLIC cxx_std_17)

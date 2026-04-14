@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include "test_result.hpp"
 #include "test_runner.hpp"
-#include "interface/i_backend.hpp"
+#include <core/interface/i_backend.hpp>
 
 namespace gpu_test_utils {
 

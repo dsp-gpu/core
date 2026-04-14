@@ -1,7 +1,7 @@
 #if ENABLE_ROCM
 
-#include "stream_pool.hpp"
-#include "../../logger/logger.hpp"
+#include <core/backends/rocm/stream_pool.hpp>
+#include <core/logger/logger.hpp>
 
 #include <algorithm>
 

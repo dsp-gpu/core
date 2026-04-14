@@ -2,10 +2,10 @@
 // test_services.hpp - Multithread tests for DrvGPU services
 // Author: Codo, Date: 2026-02-07
 
-#include "../services/async_service_base.hpp"
-#include "../services/gpu_profiler.hpp"
-#include "../services/console_output.hpp"
-#include "../services/service_manager.hpp"
+#include <core/services/async_service_base.hpp>
+#include <core/services/gpu_profiler.hpp>
+#include <core/services/console_output.hpp>
+#include <core/services/service_manager.hpp>
 #include <iostream>
 #include <thread>
 #include <vector>

@@ -10,11 +10,11 @@
 
 #if ENABLE_ROCM
 
-#include "interface/gpu_context.hpp"
-#include "interface/i_backend.hpp"
-#include "backends/rocm/rocm_backend.hpp"
-#include "services/kernel_cache_service.hpp"
-#include "services/console_output.hpp"
+#include <core/interface/gpu_context.hpp>
+#include <core/interface/i_backend.hpp>
+#include <core/backends/rocm/rocm_backend.hpp>
+#include <core/services/kernel_cache_service.hpp>
+#include <core/services/console_output.hpp>
 
 #include <rocblas/rocblas.h>
 

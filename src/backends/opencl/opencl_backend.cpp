@@ -1,6 +1,6 @@
-#include "opencl_backend.hpp"
-#include "../../config/gpu_config.hpp"
-#include "../../logger/logger.hpp"
+#include <core/backends/opencl/opencl_backend.hpp>
+#include <core/config/gpu_config.hpp>
+#include <core/logger/logger.hpp>
 
 #include <sstream>
 #include <iomanip>

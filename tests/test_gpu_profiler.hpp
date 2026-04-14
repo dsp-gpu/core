@@ -5,8 +5,8 @@
  * @author Codo, Date: 2026-02-08
  */
 
-#include "../services/gpu_profiler.hpp"
-#include "../include/gpu_manager.hpp"  // Для GetGPUReportInfo()
+#include <core/services/gpu_profiler.hpp>
+#include <core/gpu_manager.hpp>  // Для GetGPUReportInfo()
 #include <iostream>
 #include <thread>
 #include <vector>

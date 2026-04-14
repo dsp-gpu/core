@@ -14,8 +14,8 @@
  * @date 2026-02-07
  */
 
-#include "batch_manager.hpp"
-#include "../interface/i_backend.hpp"
+#include <core/services/batch_manager.hpp>
+#include <core/interface/i_backend.hpp>
 
 #include <algorithm>
 #include <iostream>

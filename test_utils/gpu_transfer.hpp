@@ -12,7 +12,7 @@
 #include <string>
 
 // DrvGPU includes
-#include "interface/i_backend.hpp"
+#include <core/interface/i_backend.hpp>
 
 // OpenCL — всегда доступен
 #include <CL/cl.h>

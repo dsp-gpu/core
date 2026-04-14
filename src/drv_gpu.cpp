@@ -7,17 +7,17 @@
  * @updated 2026-02-02 - Убрали дубликат MemoryManager (теперь в memory_manager.cpp)
  */
 
-#include "drv_gpu.hpp"
-#include "config/gpu_config.hpp"
-#include "memory/memory_manager.hpp"
-#include "backends/opencl/opencl_backend.hpp"
-#include "backends/opencl/opencl_core.hpp"
+#include <core/drv_gpu.hpp>
+#include <core/config/gpu_config.hpp>
+#include <core/memory/memory_manager.hpp>
+#include <core/backends/opencl/opencl_backend.hpp>
+#include <core/backends/opencl/opencl_core.hpp>
 #if ENABLE_ROCM
-#include "backends/rocm/rocm_backend.hpp"
-#include "backends/hybrid/hybrid_backend.hpp"
+#include <core/backends/rocm/rocm_backend.hpp>
+#include <core/backends/hybrid/hybrid_backend.hpp>
 #endif
-#include "logger/logger.hpp"
-#include "services/console_output.hpp"
+#include <core/logger/logger.hpp>
+#include <core/services/console_output.hpp>
 #include <iostream>
 #include <sstream>
 

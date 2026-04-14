@@ -1,7 +1,26 @@
+/**
+ * @file default_logger.cpp
+ * @brief Реализация DefaultLogger на plog. plog виден ТОЛЬКО в этом файле.
+ *
+ * @author DrvGPU Team
+ * @date 2026-02-01
+ * @modified 2026-04-14 (PIMPL — plog скрыт через Impl)
+ */
+
 #include "default_logger.hpp"
-#include "../config/gpu_config.hpp"
+
+#include <core/config/gpu_config.hpp>
+#include <core/logger/config_logger.hpp>
+
+// ═════════════════════════════════════════════════════════════════════════════
+// plog — единственное место во всём ядре где виден заголовок plog.
+// Клиенты (spectrum/stats/...) никогда не увидят plog.
+// ═════════════════════════════════════════════════════════════════════════════
+#include <plog/Log.h>
+#include <plog/Initializers/RollingFileInitializer.h>
 #include <plog/Record.h>
 #include <plog/Appenders/RollingFileAppender.h>
+
 #include <iostream>
 #include <iomanip>
 
@@ -10,7 +29,6 @@ namespace plog {
 // ════════════════════════════════════════════════════════════════════════════
 // DrvGPUFormatter — кастомный форматтер для plog
 // Формат: "YYYY-MM-DD HH:MM:SS.mmm LEVEL [Component] Message"
-// Убраны: [ThreadID] [@InstanceID] (не нужны для GPU логов)
 // ════════════════════════════════════════════════════════════════════════════
 class DrvGPUFormatter {
 public:
@@ -23,18 +41,14 @@ public:
         util::localtime_s(&t, &record.getTime().time);
 
         util::nostringstream ss;
-        // Дата: YYYY-MM-DD
         ss << t.tm_year + 1900 << PLOG_NSTR("-")
            << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_mon + 1 << PLOG_NSTR("-")
            << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_mday << PLOG_NSTR(" ");
-        // Время: HH:MM:SS.mmm
         ss << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_hour << PLOG_NSTR(":")
            << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_min << PLOG_NSTR(":")
            << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_sec << PLOG_NSTR(".")
            << std::setfill(PLOG_NSTR('0')) << std::setw(3) << static_cast<int>(record.getTime().millitm) << PLOG_NSTR(" ");
-        // Уровень: DEBUG/INFO/WARN/ERROR
         ss << std::setfill(PLOG_NSTR(' ')) << std::setw(5) << std::left << severityToString(record.getSeverity()) << PLOG_NSTR(" ");
-        // Сообщение
         ss << record.getMessage() << PLOG_NSTR("\n");
 
         return ss.str();
@@ -46,16 +60,21 @@ public:
 namespace drv_gpu_lib {
 
 // ════════════════════════════════════════════════════════════════════════════
-// DefaultLogger Implementation - Per-GPU файловое логирование на plog
+// PIMPL: plog::Severity и прочие plog-детали скрыты от клиентов
+// ════════════════════════════════════════════════════════════════════════════
+
+class DefaultLogger::Impl {
+public:
+    plog::Severity current_level_ = plog::debug;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// DefaultLogger — Per-GPU файловое логирование на plog
 // ════════════════════════════════════════════════════════════════════════════
 
 std::map<int, std::unique_ptr<DefaultLogger>> DefaultLogger::instances_;
 std::mutex DefaultLogger::instances_mutex_;
 
-/**
- * @brief Получить логер для данного GPU (отдельный инстанс на каждый gpu_id)
- * @param gpu_id Номер GPU (0, 1, 2, ...). Путь: log_path/Logs/DRVGPU_XX/{YYYY-MM-DD}/
- */
 DefaultLogger& DefaultLogger::GetInstance(int gpu_id) {
     if (gpu_id < 0 || gpu_id >= kMaxGpuLogInstances) {
         gpu_id = 0;
@@ -68,37 +87,22 @@ DefaultLogger& DefaultLogger::GetInstance(int gpu_id) {
     return *it->second;
 }
 
-/**
- * @brief Конструктор DefaultLogger для конкретного GPU
- * @param gpu_id Номер GPU (путь лога: Logs/DRVGPU_XX/)
- */
 DefaultLogger::DefaultLogger(int gpu_id)
     : gpu_id_(gpu_id)
     , initialized_(false)
-    , current_level_(plog::debug) {
+    , impl_(std::make_unique<Impl>()) {
     Initialize();
 }
 
-/**
- * @brief Деструктор DefaultLogger
- *
- * Вызывает Shutdown() для корректного завершения.
- */
+// Деструктор обязан быть в .cpp (где видна полная Impl) — PIMPL правило
 DefaultLogger::~DefaultLogger() {
     Shutdown();
 }
 
 // Диспетчеризация plog::init по instance ID с кастомным форматтером DrvGPUFormatter
-// Формат: "YYYY-MM-DD HH:MM:SS.mmm LEVEL [Component] Message" (без ThreadID, без InstanceID)
 #define DRVGPU_PLOG_INIT_CASE(N) \
     case N: plog::init<plog::DrvGPUFormatter, N>(plog::debug, log_file_path.c_str(), kMaxFileSize, kMaxFiles); break;
 
-/**
- * @brief Инициализировать plog file logger для этого GPU
- *
- * Путь: log_path/Logs/DRVGPU_XX/{YYYY-MM-DD}/{HH-MM-SS}.log
- * Использует GetLogFilePathForGPU(gpu_id_) и CreateLogDirectoryForGPU(gpu_id_).
- */
 void DefaultLogger::Initialize() {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -106,7 +110,7 @@ void DefaultLogger::Initialize() {
         return;
     }
 
-    // Проверяем is_logger из configGPU.json для данного GPU
+    // is_logger из configGPU.json
     if (!GPUConfig::GetInstance().IsLoggingEnabled(gpu_id_)) {
         initialized_ = true;
         return;
@@ -141,6 +145,7 @@ void DefaultLogger::Initialize() {
 #undef DRVGPU_PLOG_INIT_CASE
 
 namespace {
+
 template<int InstanceId>
 void WriteToPlogInstance(plog::Severity severity, const std::string& message) {
     plog::Logger<InstanceId>* log = plog::get<InstanceId>();
@@ -148,7 +153,9 @@ void WriteToPlogInstance(plog::Severity severity, const std::string& message) {
         (*log) += plog::Record(severity, "", 0, "", nullptr, InstanceId).ref() << message;
     }
 }
+
 #define DRVGPU_PLOG_WRITE_CASE(N) case N: WriteToPlogInstance<N>(severity, formatted); break;
+
 void WriteToPlogByGpuId(int gpu_id, plog::Severity severity, const std::string& formatted) {
     switch (gpu_id) {
         DRVGPU_PLOG_WRITE_CASE(0)  DRVGPU_PLOG_WRITE_CASE(1)  DRVGPU_PLOG_WRITE_CASE(2)  DRVGPU_PLOG_WRITE_CASE(3)
@@ -162,25 +169,16 @@ void WriteToPlogByGpuId(int gpu_id, plog::Severity severity, const std::string& 
         default: WriteToPlogInstance<0>(severity, formatted); break;
     }
 }
-#undef DRVGPU_PLOG_WRITE_CASE
-}
 
-/**
- * @brief Очистить и завершить работу plog
- *
- * plog не требует явного shutdown — ресурсы освобождаются автоматически.
- * Метод оставлен для совместимости с интерфейсом.
- */
+#undef DRVGPU_PLOG_WRITE_CASE
+
+} // namespace
+
 void DefaultLogger::Shutdown() {
     std::lock_guard<std::mutex> lock(mutex_);
     initialized_ = false;
 }
 
-/**
- * @brief Логировать отладочное сообщение
- * @param component Имя компонента (например: "OpenCL", "Memory")
- * @param message Текст сообщения
- */
 void DefaultLogger::Debug(const std::string& component, const std::string& message) {
     if (!initialized_) return;
     std::string formatted = FormatMessage(component, message);
@@ -205,63 +203,32 @@ void DefaultLogger::Error(const std::string& component, const std::string& messa
     WriteToPlogByGpuId(gpu_id_, plog::error, formatted);
 }
 
-/**
- * @brief Проверить, активен ли уровень DEBUG
- * @return true если DEBUG активен
- */
 bool DefaultLogger::IsDebugEnabled() const {
-    return initialized_ && current_level_ >= plog::debug;
+    return initialized_ && impl_->current_level_ >= plog::debug;
 }
 
-/**
- * @brief Проверить, активен ли уровень INFO
- * @return true если INFO активен
- */
 bool DefaultLogger::IsInfoEnabled() const {
-    return initialized_ && current_level_ >= plog::info;
+    return initialized_ && impl_->current_level_ >= plog::info;
 }
 
-/**
- * @brief Проверить, активен ли уровень WARNING
- * @return true если WARNING активен
- */
 bool DefaultLogger::IsWarningEnabled() const {
-    return initialized_ && current_level_ >= plog::warning;
+    return initialized_ && impl_->current_level_ >= plog::warning;
 }
 
-/**
- * @brief Проверить, активен ли уровень ERROR
- * @return true если ERROR активен
- */
 bool DefaultLogger::IsErrorEnabled() const {
-    return initialized_ && current_level_ >= plog::error;
+    return initialized_ && impl_->current_level_ >= plog::error;
 }
 
-/**
- * @brief Сбросить состояние логера
- *
- * Вызывает Shutdown() + Initialize() для переинициализации.
- */
 void DefaultLogger::Reset() {
     Shutdown();
     Initialize();
 }
 
-/**
- * @brief Форматировать сообщение с компонентом
- * @param component Имя компонента
- * @param message Текст сообщения
- * @return Отформатированное сообщение "[component] message"
- */
 std::string DefaultLogger::FormatMessage(const std::string& component,
                                           const std::string& message) {
     return "[" + component + "] " + message;
 }
 
-/**
- * @brief Проверить, инициализирован ли логер
- * @return true если логер инициализирован
- */
 bool DefaultLogger::IsInitialized() const {
     return initialized_;
 }

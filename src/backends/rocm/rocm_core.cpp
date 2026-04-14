@@ -1,7 +1,7 @@
 #if ENABLE_ROCM
 
-#include "rocm_core.hpp"
-#include "../../logger/logger.hpp"
+#include <core/backends/rocm/rocm_core.hpp>
+#include <core/logger/logger.hpp>
 #include <sstream>
 #include <iomanip>
 

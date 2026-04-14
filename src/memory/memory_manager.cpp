@@ -7,8 +7,8 @@
  * @fixed 2026-02-02 - Deadlock fix (TrackAllocation/TrackFree БЕЗ mutex lock)
  */
 
-#include "memory/memory_manager.hpp"
-#include "logger/logger.hpp"
+#include <core/memory/memory_manager.hpp>
+#include <core/logger/logger.hpp>
 #include <iostream>
 #include <iomanip>
 #include <sstream>

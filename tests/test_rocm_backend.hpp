@@ -14,10 +14,10 @@
 
 #if ENABLE_ROCM
 
-#include "backends/rocm/rocm_backend.hpp"
-#include "memory/memory_manager.hpp"
-#include "memory/gpu_buffer.hpp"
-#include "services/console_output.hpp"
+#include <core/backends/rocm/rocm_backend.hpp>
+#include <core/memory/memory_manager.hpp>
+#include <core/memory/gpu_buffer.hpp>
+#include <core/services/console_output.hpp>
 
 #include <vector>
 #include <complex>

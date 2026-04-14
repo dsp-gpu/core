@@ -9,7 +9,7 @@
  * @date 2026-02-22
  */
 
-#include "kernel_cache_service.hpp"
+#include <core/services/kernel_cache_service.hpp>
 
 #include <filesystem>
 #include <fstream>

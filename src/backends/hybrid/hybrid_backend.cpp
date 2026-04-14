@@ -8,7 +8,7 @@
 
 #if ENABLE_ROCM
 
-#include "hybrid_backend.hpp"
+#include <core/backends/hybrid/hybrid_backend.hpp>
 
 namespace drv_gpu_lib {
 

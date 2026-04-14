@@ -26,8 +26,8 @@
  * @date 2026-03-09
  */
 
-#include "drv_gpu.hpp"
-#include "services/console_output.hpp"
+#include <core/drv_gpu.hpp>
+#include <core/services/console_output.hpp>
 
 #include <CL/cl.h>
 #include <vector>

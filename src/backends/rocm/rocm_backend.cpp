@@ -1,6 +1,6 @@
 #if ENABLE_ROCM
 
-#include "rocm_backend.hpp"
+#include <core/backends/rocm/rocm_backend.hpp>
 #include "../../config/gpu_config.hpp"
 
 #include <sstream>

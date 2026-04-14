@@ -11,9 +11,9 @@
  * @date 2026-02-22
  */
 
-#include "../services/storage/file_storage_backend.hpp"
-#include "../services/kernel_cache_service.hpp"
-#include "../services/filter_config_service.hpp"
+#include <core/services/storage/file_storage_backend.hpp>
+#include <core/services/kernel_cache_service.hpp>
+#include <core/services/filter_config_service.hpp>
 
 #include <iostream>
 #include <filesystem>

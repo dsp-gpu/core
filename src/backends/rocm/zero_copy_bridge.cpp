@@ -16,10 +16,10 @@
 
 #if ENABLE_ROCM
 
-#include "zero_copy_bridge.hpp"
-#include "hsa_interop.hpp"
-#include "../opencl/gpu_copy_kernel.hpp"
-#include "../../logger/logger.hpp"
+#include <core/backends/rocm/zero_copy_bridge.hpp>
+#include <core/backends/rocm/hsa_interop.hpp>
+#include <core/backends/opencl/gpu_copy_kernel.hpp>
+#include <core/logger/logger.hpp>
 
 #include <hip/hip_runtime.h>
 #include <cinttypes>  // PRIxPTR

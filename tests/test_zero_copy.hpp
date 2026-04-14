@@ -19,12 +19,12 @@
 
 #if ENABLE_ROCM
 
-#include "../backends/opencl/opencl_backend.hpp"
-#include "../backends/opencl/opencl_export.hpp"
-#include "../backends/rocm/rocm_backend.hpp"
-#include "../backends/rocm/zero_copy_bridge.hpp"
-#include "../backends/rocm/hsa_interop.hpp"
-#include "../logger/logger.hpp"
+#include <core/backends/opencl/opencl_backend.hpp>
+#include <core/backends/opencl/opencl_export.hpp>
+#include <core/backends/rocm/rocm_backend.hpp>
+#include <core/backends/rocm/zero_copy_bridge.hpp>
+#include <core/backends/rocm/hsa_interop.hpp>
+#include <core/logger/logger.hpp>
 
 #include <CL/cl.h>
 #include <hip/hip_runtime.h>

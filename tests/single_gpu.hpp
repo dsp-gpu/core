@@ -5,8 +5,8 @@
  * Демонстрирует базовое использование DrvGPU с одной GPU.
  */
 
-#include "drv_gpu.hpp"
-#include "common/backend_type.hpp"
+#include <core/drv_gpu.hpp>
+#include <core/common/backend_type.hpp>
 #include <iostream>
 #include <vector>
 

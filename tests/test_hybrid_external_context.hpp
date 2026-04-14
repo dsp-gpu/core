@@ -25,10 +25,10 @@
 
 #if ENABLE_ROCM
 
-#include "backends/hybrid/hybrid_backend.hpp"
-#include "backends/opencl/opencl_backend.hpp"
-#include "backends/rocm/rocm_backend.hpp"
-#include "services/console_output.hpp"
+#include <core/backends/hybrid/hybrid_backend.hpp>
+#include <core/backends/opencl/opencl_backend.hpp>
+#include <core/backends/rocm/rocm_backend.hpp>
+#include <core/services/console_output.hpp>
 
 #include <hip/hip_runtime.h>
 #include <CL/cl.h>

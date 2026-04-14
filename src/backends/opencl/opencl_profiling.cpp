@@ -1,4 +1,4 @@
-#include "opencl_profiling.hpp"
+#include <core/backends/opencl/opencl_profiling.hpp>
 
 #ifndef CL_PROFILING_COMMAND_COMPLETE
 #define CL_PROFILING_COMMAND_COMPLETE 0x1284

@@ -6,8 +6,8 @@
  * @date 2026-02-22
  */
 
-#include "filter_config_service.hpp"
-#include "storage/file_storage_backend.hpp"
+#include <core/services/filter_config_service.hpp>
+#include <core/services/storage/file_storage_backend.hpp>
 
 #include <filesystem>
 #include <sstream>

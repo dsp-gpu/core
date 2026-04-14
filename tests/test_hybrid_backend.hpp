@@ -19,9 +19,9 @@
 
 #if ENABLE_ROCM
 
-#include "../backends/hybrid/hybrid_backend.hpp"
-#include "../backends/rocm/zero_copy_bridge.hpp"
-#include "../logger/logger.hpp"
+#include <core/backends/hybrid/hybrid_backend.hpp>
+#include <core/backends/rocm/zero_copy_bridge.hpp>
+#include <core/logger/logger.hpp>
 
 #include <CL/cl.h>
 #include <hip/hip_runtime.h>

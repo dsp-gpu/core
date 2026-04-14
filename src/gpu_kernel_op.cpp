@@ -10,8 +10,8 @@
 
 #if ENABLE_ROCM
 
-#include "services/gpu_kernel_op.hpp"
-#include "interface/gpu_context.hpp"
+#include <core/services/gpu_kernel_op.hpp>
+#include <core/interface/gpu_context.hpp>
 
 namespace drv_gpu_lib {
 
