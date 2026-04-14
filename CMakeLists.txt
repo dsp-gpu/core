@@ -82,7 +82,7 @@ add_library(DspCore::TestUtils ALIAS DspCoreTestUtils)
 
 target_include_directories(DspCoreTestUtils INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test_utils/include>
-  $<INSTALL_INTERFACE:include/dsp/test>
+  $<INSTALL_INTERFACE:include/core/test>
 )
 target_link_libraries(DspCoreTestUtils INTERFACE DspCore::DspCore)
 
@@ -97,7 +97,7 @@ install(DIRECTORY include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 install(DIRECTORY test_utils/include/
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dsp/test
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/core/test
 )
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DspCore

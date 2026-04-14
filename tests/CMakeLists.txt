@@ -4,12 +4,15 @@
 
 # ── HSA runtime: нужен test_core_main (через test_zero_copy.hpp)
 #    и test_zerocopy_rdna4. find_library — портабельно через CMAKE_PREFIX_PATH.
-find_library(HSA_RUNTIME_LIB
-  NAMES hsa-runtime64
-  PATH_SUFFIXES lib lib64
-  REQUIRED
-)
-message(STATUS "[DspCore tests] HSA runtime: ${HSA_RUNTIME_LIB}")
+# Только на Linux/ROCm — на Windows нет hsa-runtime64, тесты не линкуются с HSA.
+if(UNIX)
+  find_library(HSA_RUNTIME_LIB
+    NAMES hsa-runtime64
+    PATH_SUFFIXES lib lib64
+    REQUIRED
+  )
+  message(STATUS "[DspCore tests] HSA runtime: ${HSA_RUNTIME_LIB}")
+endif()
 
 # ── Основной тест-раннер (all_test.hpp) ────────────────────────────
 add_executable(test_core_main
@@ -18,7 +21,7 @@ add_executable(test_core_main
 target_link_libraries(test_core_main PRIVATE
   DspCore::DspCore
   DspCore::TestUtils
-  ${HSA_RUNTIME_LIB}
+  $<$<BOOL:${HSA_RUNTIME_LIB}>:${HSA_RUNTIME_LIB}>
 )
 target_include_directories(test_core_main PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -34,5 +37,5 @@ add_executable(test_zerocopy_rdna4
 )
 target_link_libraries(test_zerocopy_rdna4 PRIVATE
   DspCore::DspCore
-  ${HSA_RUNTIME_LIB}
+  $<$<BOOL:${HSA_RUNTIME_LIB}>:${HSA_RUNTIME_LIB}>
 )

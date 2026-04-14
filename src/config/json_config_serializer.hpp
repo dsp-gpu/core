@@ -60,7 +60,6 @@ private:
     std::unique_ptr<Impl> impl_;        // PIMPL
 
     // Внутренний конструктор для sub-reader'ов (GetObject / GetArray)
-    friend class JsonConfigReaderInternalAccess;
     explicit JsonConfigReader(std::unique_ptr<Impl> impl);
 };
 
@@ -91,7 +90,6 @@ private:
     class Impl;                         // forward — nlohmann невиден
     std::unique_ptr<Impl> impl_;        // PIMPL
 
-    friend class JsonConfigWriterInternalAccess;
     explicit JsonConfigWriter(std::unique_ptr<Impl> impl);
 };
 
