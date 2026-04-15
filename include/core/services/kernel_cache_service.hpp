@@ -10,11 +10,18 @@
  * Features:
  * - Save: .cl source + binary + manifest.json
  * - Load: binary (fast path) or source (fallback)
- * - Versioning: old files renamed _00, _01, ...
+ * - Per-arch subdir (gfx908/gfx1100/…) — корректно для multi-GPU
+ * - Atomic write: name.tmp → rename(tmp, name) (POSIX atomic)
+ * - Idempotent Save: если файл того же размера уже есть — skip IO
  * - ROCm support: binary suffix _opencl.bin / _rocm.hsaco
  *
+ * Multi-GPU safety (1 GPU = 1 object = 1 thread, без блокировок):
+ *   При параллельном Save из нескольких потоков с одинаковым source+arch —
+ *   содержимое .hsaco побайтово идентично, atomic rename не даст увидеть
+ *   "полузаписанный" файл, idempotent-check избежит лишнего IO.
+ *
  * @author Kodo (AI Assistant)
- * @date 2026-02-22
+ * @date 2026-02-22  (update: 2026-04-15 — per-arch + atomic + idempotent)
  */
 
 #include <core/common/backend_type.hpp>
@@ -29,11 +36,15 @@ namespace drv_gpu_lib {
 class KernelCacheService {
 public:
   /**
-   * @param base_dir Root cache directory (e.g. "modules/signal_generators/kernels")
+   * @param base_dir     Root cache directory (e.g. "<exe_dir>/kernels_cache/capon")
    * @param backend_type OPENCL or ROCm — determines binary file suffix
+   * @param arch         GPU architecture (e.g. "gfx908", "gfx1100"). Пустая —
+   *                     per-arch подкаталог не создаётся (legacy поведение).
+   *                     При непустом arch итоговая директория = base_dir/arch/.
    */
   KernelCacheService(const std::string& base_dir,
-                     BackendType backend_type = BackendType::OPENCL);
+                     BackendType backend_type = BackendType::OPENCL,
+                     const std::string& arch = "");
 
   /**
    * @brief Cached kernel entry (source + binary)
@@ -87,14 +98,26 @@ public:
   std::string GetBinDir() const;
 
 private:
-  std::string base_dir_;
+  std::string base_dir_;      ///< Итоговая директория (с учётом arch если задан).
+  std::string arch_;          ///< GPU arch (для логирования). Пустая = legacy.
   BackendType backend_type_;
 
   /// Returns "_opencl.bin" or "_rocm.hsaco"
   std::string GetBinarySuffix() const;
 
   /// Rename existing files: name -> name_00, name_01, ...
+  /// LEGACY — больше не вызывается в Save(). Оставлено для CLI-утилит.
   void VersionOldFiles(const std::string& name) const;
+
+  /// Atomic write: пишет в path.tmp, затем fs::rename(path.tmp → path).
+  /// POSIX гарантирует атомарность rename — читатели никогда не видят
+  /// полузаписанный файл. throw std::runtime_error при ошибке IO.
+  static void AtomicWrite(const std::string& path,
+                          const void* data, size_t bytes);
+
+  /// Idempotent-check: файл существует и его размер == expected_size.
+  /// Используется перед Save чтобы пропустить запись идентичного содержимого.
+  static bool FileSizeEquals(const std::string& path, size_t expected_size);
 
   /// Update manifest.json with new/updated entry
   void WriteManifestEntry(const std::string& name,

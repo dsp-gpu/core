@@ -60,9 +60,13 @@ GpuContext::GpuContext(IBackend* backend,
     warp_size_ = 32;
   }
 
-  // Disk cache for compiled HSACO
+  // Disk cache for compiled HSACO.
+  // Per-arch подкаталог (gfx908/gfx1100/…) добавляется внутри KernelCacheService.
+  // Это КРИТИЧНО для multi-GPU: HSACO скомпилированный для gfx908 не будет
+  // использован на gfx1100 — изоляция через подкаталог по arch.
   if (!cache_dir.empty()) {
-    kernel_cache_ = std::make_unique<KernelCacheService>(cache_dir, BackendType::ROCm);
+    kernel_cache_ = std::make_unique<KernelCacheService>(
+        cache_dir, BackendType::ROCm, arch_name_);  // ← arch_name_ определён выше
   }
 }
 

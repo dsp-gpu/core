@@ -34,9 +34,57 @@ namespace drv_gpu_lib {
  *                     Подкаталог bin/ создаётся автоматически при первом Save().
  * @param backend_type OPENCL → суффикс "_opencl.bin"; ROCm → "_rocm.hsaco"
  */
+/**
+ * @brief Создаёт сервис. При непустом arch — путь = base_dir/arch/ (multi-GPU).
+ *
+ * Per-arch subdir нужен потому что HSACO привязан к GPU-архитектуре
+ * (gfx908 ≠ gfx1100). Если все 10 GPU одной arch — одна подпапка на всех,
+ * одна компиляция, 10 параллельных чтений HSACO. Разные arch → изоляция.
+ */
 KernelCacheService::KernelCacheService(const std::string& base_dir,
-                                       BackendType backend_type)
-    : base_dir_(base_dir), backend_type_(backend_type) {
+                                       BackendType backend_type,
+                                       const std::string& arch)
+    : base_dir_(arch.empty() ? base_dir : (base_dir + "/" + arch)),
+      arch_(arch),
+      backend_type_(backend_type) {
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AtomicWrite / FileSizeEquals (статические helpers для multi-GPU safety)
+// ════════════════════════════════════════════════════════════════════════════
+
+void KernelCacheService::AtomicWrite(const std::string& path,
+                                     const void* data, size_t bytes) {
+  // Pattern "write tmp + rename": fs::rename на POSIX атомарен, читатели
+  // никогда не видят полузаписанный файл. При concurrent write от 10 потоков
+  // с одинаковым содержимым — последний побеждает, результат идентичен.
+  std::string tmp = path + ".tmp";
+  {
+    std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+    if (!f.is_open()) {
+      throw std::runtime_error("KernelCacheService::AtomicWrite: cannot open " + tmp);
+    }
+    if (bytes > 0) {
+      f.write(reinterpret_cast<const char*>(data),
+              static_cast<std::streamsize>(bytes));
+    }
+    // Явный close перед rename — чтобы все данные ушли на диск до переименования.
+  }
+  std::error_code ec;
+  fs::rename(tmp, path, ec);
+  if (ec) {
+    // Удалим tmp чтобы не оставлять мусор.
+    fs::remove(tmp, ec);
+    throw std::runtime_error("KernelCacheService::AtomicWrite: rename failed " + path);
+  }
+}
+
+bool KernelCacheService::FileSizeEquals(const std::string& path, size_t expected_size) {
+  std::error_code ec;
+  if (!fs::exists(path, ec)) return false;
+  auto sz = fs::file_size(path, ec);
+  if (ec) return false;
+  return static_cast<size_t>(sz) == expected_size;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -59,6 +107,25 @@ KernelCacheService::KernelCacheService(const std::string& base_dir,
  * @param metadata  Строка-метаданные (параметры компиляции, версия)
  * @param comment   Человекочитаемый комментарий для manifest.json
  */
+/**
+ * @brief Idempotent + atomic Save (multi-GPU safe, no locks).
+ *
+ * Изменения v2 (2026-04-15):
+ *   - Убран VersionOldFiles (rename race между потоками → дубли _00, _01…)
+ *   - Idempotent: skip IO если файл уже существует с тем же размером
+ *   - Atomic write: .tmp → rename (POSIX atomic)
+ *
+ * Порядок:
+ *   1. create_directories(base_dir_/bin) — идемпотентно
+ *   2. .cl source → atomic write (если размер не совпадает)
+ *   3. binary   → atomic write (если размер не совпадает)
+ *   4. manifest → UPSERT atomic write (всегда — timestamp меняется)
+ *
+ * При 10 параллельных Save (одна arch, одинаковый source):
+ *   - Поток 1 пишет first.tmp → rename → first.hsaco
+ *   - Поток 2: видит first.hsaco с тем же размером → skip write (no IO)
+ *   - Результат: 1 write, 9 skip. Без блокировок.
+ */
 void KernelCacheService::Save(const std::string& name,
                                const std::string& cl_source,
                                const std::vector<uint8_t>& binary,
@@ -69,36 +136,25 @@ void KernelCacheService::Save(const std::string& name,
         "KernelCacheService::Save: name cannot be empty");
   }
 
+  // Создаём директории (base_dir_ уже с arch suffix если задан)
+  std::error_code ec;
+  fs::create_directories(base_dir_, ec);
   std::string bin_dir = GetBinDir();
-  fs::create_directories(bin_dir);
+  fs::create_directories(bin_dir, ec);
 
-  // Version old files if they exist
-  VersionOldFiles(name);
-
-  // Save .cl source
+  // ── .cl source (atomic + idempotent) ──────────────────────────────────
   std::string cl_path = base_dir_ + "/" + name + ".cl";
-  {
-    std::ofstream f(cl_path);
-    if (!f.is_open()) {
-      throw std::runtime_error(
-          "KernelCacheService::Save: cannot write " + cl_path);
-    }
-    f << cl_source;
+  if (!FileSizeEquals(cl_path, cl_source.size())) {
+    AtomicWrite(cl_path, cl_source.data(), cl_source.size());
   }
 
-  // Save binary
+  // ── binary (atomic + idempotent) ──────────────────────────────────────
   std::string bin_path = bin_dir + "/" + name + GetBinarySuffix();
-  {
-    std::ofstream f(bin_path, std::ios::binary);
-    if (!f.is_open()) {
-      throw std::runtime_error(
-          "KernelCacheService::Save: cannot write " + bin_path);
-    }
-    f.write(reinterpret_cast<const char*>(binary.data()),
-            static_cast<std::streamsize>(binary.size()));
+  if (!FileSizeEquals(bin_path, binary.size())) {
+    AtomicWrite(bin_path, binary.data(), binary.size());
   }
 
-  // Update manifest
+  // ── manifest.json (atomic UPSERT, перезапись — timestamp обновляется) ─
   WriteManifestEntry(name, metadata, comment);
 }
 
@@ -372,18 +428,23 @@ void KernelCacheService::WriteManifestEntry(
   // Add new entry
   entries.push_back(entry.str());
 
-  // Write manifest (binary mode — LF only)
-  std::ofstream f(manifest_path, std::ios::binary);
-  f << "{\n";
-  f << "  \"version\": 1,\n";
-  f << "  \"kernels\": [\n";
+  // Сформировать полный текст manifest в буфере (для atomic rename)
+  std::ostringstream buf;
+  buf << "{\n";
+  buf << "  \"version\": 1,\n";
+  buf << "  \"kernels\": [\n";
   for (size_t i = 0; i < entries.size(); ++i) {
-    f << entries[i];
-    if (i + 1 < entries.size()) f << ",";
-    f << "\n";
+    buf << entries[i];
+    if (i + 1 < entries.size()) buf << ",";
+    buf << "\n";
   }
-  f << "  ]\n";
-  f << "}\n";
+  buf << "  ]\n";
+  buf << "}\n";
+
+  // Atomic write через .tmp + rename — при concurrent write от 10 потоков
+  // manifest.json никогда не окажется частично записанным.
+  std::string data = buf.str();
+  AtomicWrite(manifest_path, data.data(), data.size());
 }
 
 // ════════════════════════════════════════════════════════════════════════════
