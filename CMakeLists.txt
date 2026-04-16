@@ -91,6 +91,10 @@ add_library(DspCore::TestUtils ALIAS DspCoreTestUtils)
 
 target_include_directories(DspCoreTestUtils INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/test_utils/include>
+  # test_utils/*.hpp — test_runner, reporters, references, gpu_transfer
+  # Тесты downstream модулей (stats, spectrum, ...) включают через:
+  #   #include "test_utils.hpp" или #include "modules/test_utils/test_utils.hpp"
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:include/dsp/test>
 )
 target_link_libraries(DspCoreTestUtils INTERFACE DspCore::DspCore)
