@@ -16,6 +16,9 @@ find_package(OpenCL REQUIRED)
 add_library(DspCore STATIC)
 add_library(DspCore::DspCore ALIAS DspCore)
 
+# PIC нужен для Python bindings (.so линкует static DspCore)
+set_target_properties(DspCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_sources(DspCore PRIVATE
   # Core
   src/drv_gpu.cpp
@@ -35,6 +38,7 @@ target_sources(DspCore PRIVATE
   src/backends/rocm/rocm_core.cpp
   src/backends/rocm/stream_pool.cpp
   src/backends/rocm/zero_copy_bridge.cpp
+  src/backends/rocm/hsa_interop.cpp
   # Backends — Hybrid
   src/backends/hybrid/hybrid_backend.cpp
   # Logger
@@ -47,6 +51,7 @@ target_sources(DspCore PRIVATE
   src/services/batch_manager.cpp
   src/services/kernel_cache_service.cpp
   src/services/filter_config_service.cpp
+  src/services/gpu_profiler.cpp
   src/services/storage/file_storage_backend.cpp
 )
 
@@ -74,6 +79,10 @@ target_compile_features(DspCore PUBLIC cxx_std_17)
 # PUBLIC — чтобы клиенты ядра (spectrum/stats/...) тоже видели макрос.
 if(ENABLE_ROCM)
   target_compile_definitions(DspCore PUBLIC ENABLE_ROCM=1)
+  # hiprtc нужна для GpuContext::CompileModule() (runtime kernel compilation).
+  # PUBLIC — downstream (spectrum/stats/...) линкуют DspCore и получают hiprtc транзитивно.
+  find_library(HIPRTC_LIB_CORE NAMES hiprtc PATH_SUFFIXES lib lib64 REQUIRED)
+  target_link_libraries(DspCore PUBLIC ${HIPRTC_LIB_CORE})
 endif()
 
 # ── TestUtils — ОТДЕЛЬНАЯ target (не протекает в публичный API) ────

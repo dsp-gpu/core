@@ -96,6 +96,15 @@ public:
     /**
      * @brief Деструктор — автоматически останавливает рабочий поток
      * Ожидает обработки всех сообщений в очереди.
+     *
+     * ⚠️ ПРАВИЛО ДЛЯ НАСЛЕДНИКОВ:
+     * КАЖДЫЙ наследник ОБЯЗАН вызвать Stop() в СВОЁМ деструкторе!
+     * Причина: к моменту ~AsyncServiceBase() vtable уже переключена на
+     * базовый класс → ProcessMessage() (pure virtual) → UB / terminate.
+     * Пример: ~ConsoleOutput() { Stop(); }
+     *         ~GPUProfiler()   { Stop(); }
+     * Stop() идемпотентен (compare_exchange) — повторный вызов из базового
+     * деструктора безопасен.
      */
     virtual ~AsyncServiceBase() {
         Stop();

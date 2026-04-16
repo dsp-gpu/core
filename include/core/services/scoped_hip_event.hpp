@@ -87,6 +87,26 @@ public:
     return hipEventCreateWithFlags(&event_, flags);
   }
 
+  /// Создать hipEvent_t. Бросает std::runtime_error при ошибке.
+  void CreateOrThrow() {
+    hipError_t err = Create();
+    if (err != hipSuccess) {
+      throw std::runtime_error(
+          std::string("ScopedHipEvent::Create failed: ") +
+          hipGetErrorString(err));
+    }
+  }
+
+  /// Создать hipEvent_t с флагами. Бросает std::runtime_error при ошибке.
+  void CreateWithFlagsOrThrow(unsigned int flags) {
+    hipError_t err = CreateWithFlags(flags);
+    if (err != hipSuccess) {
+      throw std::runtime_error(
+          std::string("ScopedHipEvent::CreateWithFlags failed: ") +
+          hipGetErrorString(err));
+    }
+  }
+
   hipEvent_t get() const { return event_; }
   bool valid() const { return event_ != nullptr; }
 

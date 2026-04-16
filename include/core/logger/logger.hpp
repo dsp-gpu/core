@@ -182,7 +182,8 @@ private:
 // Устаревшие макросы (для совместимости)
 // ═══════════════════════════════════════════════════════════════════════════=
 
-/// Устаревший макрос для информации (используйте DRVGPU_LOG_INFO)
-#define DRVGPU_LOG DRVGPU_LOG_INFO
+// TODO(GPUProfiler-refactor): удалить deprecated alias после OOP рефакторинга
+// Не используется в коде (проверено grep 2026-04-16)
+// #define DRVGPU_LOG DRVGPU_LOG_INFO
 
 } // namespace drv_gpu_lib

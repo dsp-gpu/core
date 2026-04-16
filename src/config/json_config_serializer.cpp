@@ -11,6 +11,7 @@
 
 #include "json_config_serializer.hpp"
 #include <core/config/config_serializer_factory.hpp>
+#include <core/logger/logger.hpp>
 
 // ═════════════════════════════════════════════════════════════════════════
 // nlohmann/json — единственное место во всём ядре где виден этот заголовок.
@@ -67,6 +68,7 @@ bool JsonConfigReader::LoadFromFile(const std::string& path) {
     try {
         std::ifstream file(path);
         if (!file.is_open()) {
+            // BOOTSTRAP: std::cerr — вызывается из GPUConfig → Logger circular dependency
             std::cerr << "[JsonConfigReader] ERROR: Cannot open file: " << path << "\n";
             return false;
         }
@@ -226,6 +228,7 @@ bool JsonConfigWriter::SaveToFile(const std::string& path) const {
         }
         std::ofstream file(path);
         if (!file.is_open()) {
+            // BOOTSTRAP: std::cerr — вызывается из GPUConfig → Logger circular
             std::cerr << "[JsonConfigWriter] ERROR: Cannot create file: " << path << "\n";
             return false;
         }

@@ -15,10 +15,18 @@ message(STATUS "[DspCore tests] HSA runtime: ${HSA_RUNTIME_LIB}")
 add_executable(test_core_main
   main.cpp
 )
+find_library(HIPRTC_LIB
+  NAMES hiprtc
+  PATH_SUFFIXES lib lib64
+  REQUIRED
+)
+message(STATUS "[DspCore tests] hiprtc: ${HIPRTC_LIB}")
+
 target_link_libraries(test_core_main PRIVATE
   DspCore::DspCore
   DspCore::TestUtils
   ${HSA_RUNTIME_LIB}
+  ${HIPRTC_LIB}
 )
 target_include_directories(test_core_main PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}

@@ -168,7 +168,9 @@ inline bool TestKernelCacheService() {
       ok = false;
     }
 
-    // 4. Versioning: save again -> old files renamed
+    // 4. Idempotent re-save: save again → overwrites in-place (v2: no versioning)
+    // v2 (2026-04-15) убрал VersionOldFiles — rename race при multi-GPU.
+    // Новое поведение: AtomicWrite перезаписывает .cl и binary напрямую.
     std::string source2 = "__kernel void test_v2(__global float* out) { out[get_global_id(0)] = 2.0f; }";
     std::vector<uint8_t> binary2 = {0xCA, 0xFE};
     cache.Save("test_kernel", source2, binary2, "N=2048", "updated");
@@ -188,10 +190,19 @@ inline bool TestKernelCacheService() {
       }
     }
 
-    // Check that old versioned file exists
-    bool old_exists = fs::exists(fs::path(dir) / "test_kernel_00.cl");
-    if (!old_exists) {
-      std::cout << "  [FAIL] Versioned file test_kernel_00.cl not found\n";
+    // v2: старые файлы НЕ версионируются (_00, _01...) — AtomicWrite перезаписывает.
+    // Проверяем что текущий .cl содержит НОВЫЙ source (не старый).
+    std::string cl_path = dir + "/test_kernel.cl";
+    if (fs::exists(cl_path)) {
+      std::ifstream f(cl_path);
+      std::string on_disk((std::istreambuf_iterator<char>(f)),
+                           std::istreambuf_iterator<char>());
+      if (on_disk != source2) {
+        std::cout << "  [FAIL] .cl file on disk != updated source\n";
+        ok = false;
+      }
+    } else {
+      std::cout << "  [FAIL] test_kernel.cl not found after re-Save\n";
       ok = false;
     }
 

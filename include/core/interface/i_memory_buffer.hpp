@@ -13,8 +13,8 @@
  * @date 2026-01-19
  */
 
-#include "svm_capabilities.hpp"
-#include "memory_type.hpp"
+#include <core/memory/svm_capabilities.hpp>
+#include <core/memory/memory_type.hpp>
 #include <CL/cl.h>
 #include <complex>
 #include <vector>

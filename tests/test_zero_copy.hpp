@@ -28,6 +28,9 @@
 
 #include <CL/cl.h>
 #include <hip/hip_runtime.h>
+// hiprtc.h нужен для test_vector_add_zerocopy (kernel compilation)
+// link: hip::hiprtc (добавить в tests/CMakeLists.txt)
+#include <hip/hiprtc.h>
 
 #include <cassert>
 #include <cmath>
@@ -608,6 +611,171 @@ static void test_force_strategy() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Test 10: Vector Add via ZeroCopy (OpenCL → ROCm)
+//
+// Сценарий (по запросу Alex):
+// 1. Два вектора создаём в OpenCL (cl_mem)
+// 2. Заполняем данными через OpenCL
+// 3. Zero-copy bridge оба вектора на ROCm (без SVM!)
+// 4. Складываем на ROCm через hiprtc kernel
+// 5. Читаем результат и проверяем
+// ════════════════════════════════════════════════════════════════════════════
+
+static void test_vector_add_zerocopy() {
+  using namespace drv_gpu_lib;
+
+  OpenCLBackend cl_backend;
+  cl_backend.Initialize(0);
+
+  ROCmBackend rocm_backend;
+  rocm_backend.Initialize(0);
+
+  cl_device_id cl_device = static_cast<cl_device_id>(cl_backend.GetNativeDevice());
+  hipStream_t stream = static_cast<hipStream_t>(rocm_backend.GetNativeQueue());
+
+  const size_t N = 4096;
+  const size_t buf_size = N * sizeof(float);
+
+  // ─── 1. Подготовить данные ────────────────────────────────────────
+  std::vector<float> host_a(N), host_b(N);
+  for (size_t i = 0; i < N; ++i) {
+    host_a[i] = static_cast<float>(i) * 1.0f;        // a[i] = i
+    host_b[i] = static_cast<float>(N - i) * 0.5f;    // b[i] = (N-i)*0.5
+  }
+
+  // ─── 2. Записать в OpenCL буферы ──────────────────────────────────
+  void* cl_buf_a = cl_backend.Allocate(buf_size);
+  void* cl_buf_b = cl_backend.Allocate(buf_size);
+  cl_backend.MemcpyHostToDevice(cl_buf_a, host_a.data(), buf_size);
+  cl_backend.MemcpyHostToDevice(cl_buf_b, host_b.data(), buf_size);
+  cl_backend.Synchronize();
+
+  std::cout << "  [VectorAdd] OpenCL: 2 buffers created (" << N << " floats each)\n";
+
+  // ─── 3. Zero-copy bridge → HIP (FORCE_GPU_COPY, без SVM) ─────────
+  bool passed = false;
+  try {
+    ZeroCopyBridge bridge_a, bridge_b;
+    bridge_a.ImportFromOpenCl(static_cast<cl_mem>(cl_buf_a), buf_size, cl_device,
+                               ZeroCopyStrategy::FORCE_GPU_COPY);
+    bridge_b.ImportFromOpenCl(static_cast<cl_mem>(cl_buf_b), buf_size, cl_device,
+                               ZeroCopyStrategy::FORCE_GPU_COPY);
+
+    float* hip_a = static_cast<float*>(bridge_a.GetHipPtr());
+    float* hip_b = static_cast<float*>(bridge_b.GetHipPtr());
+
+    std::cout << "  [VectorAdd] ZeroCopy: bridge_a method="
+              << ZeroCopyMethodToString(bridge_a.GetMethod())
+              << ", bridge_b method="
+              << ZeroCopyMethodToString(bridge_b.GetMethod()) << "\n";
+
+    // ─── 4. Сложить на ROCm через hiprtc kernel ──────────────────────
+    // Компилируем простой vectorAdd kernel через hiprtc
+    const char* kernel_src = R"(
+      extern "C" __global__ void vectorAdd(const float* a, const float* b,
+                                            float* c, int n) {
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i < n) {
+          c[i] = a[i] + b[i];
+        }
+      }
+    )";
+
+    hiprtcProgram prog;
+    hiprtcResult rtc = hiprtcCreateProgram(&prog, kernel_src,
+                                            "vectorAdd.hip", 0, nullptr, nullptr);
+    if (rtc != HIPRTC_SUCCESS) {
+      std::cout << "  [VectorAdd] hiprtcCreateProgram failed: " << rtc << "\n";
+      throw std::runtime_error("hiprtc create failed");
+    }
+
+    const char* opts[] = {"-O3"};
+    rtc = hiprtcCompileProgram(prog, 1, opts);
+    if (rtc != HIPRTC_SUCCESS) {
+      size_t logSize = 0;
+      hiprtcGetProgramLogSize(prog, &logSize);
+      std::string log(logSize, '\0');
+      hiprtcGetProgramLog(prog, &log[0]);
+      hiprtcDestroyProgram(&prog);
+      std::cout << "  [VectorAdd] Compile error:\n" << log << "\n";
+      throw std::runtime_error("hiprtc compile failed");
+    }
+
+    size_t code_size = 0;
+    hiprtcGetCodeSize(prog, &code_size);
+    std::vector<char> code(code_size);
+    hiprtcGetCode(prog, code.data());
+    hiprtcDestroyProgram(&prog);
+
+    hipModule_t module;
+    hipModuleLoadData(&module, code.data());
+
+    hipFunction_t kernel;
+    hipModuleGetFunction(&kernel, module, "vectorAdd");
+
+    // Выделяем результат на ROCm
+    float* hip_c = nullptr;
+    hipMalloc(&hip_c, buf_size);
+
+    // Запуск kernel
+    int n = static_cast<int>(N);
+    void* args[] = {&hip_a, &hip_b, &hip_c, &n};
+    int blockSize = 256;
+    int gridSize = (N + blockSize - 1) / blockSize;
+
+    hipModuleLaunchKernel(kernel,
+                           gridSize, 1, 1,
+                           blockSize, 1, 1,
+                           0, stream,
+                           args, nullptr);
+    hipStreamSynchronize(stream);
+
+    std::cout << "  [VectorAdd] ROCm: kernel launched (grid=" << gridSize
+              << ", block=" << blockSize << ")\n";
+
+    // ─── 5. Читаем результат ──────────────────────────────────────────
+    std::vector<float> result(N, 0.0f);
+    hipMemcpy(result.data(), hip_c, buf_size, hipMemcpyDeviceToHost);
+
+    // Проверяем
+    float max_error = 0.0f;
+    for (size_t i = 0; i < N; ++i) {
+      float expected = host_a[i] + host_b[i];
+      float diff = std::fabs(result[i] - expected);
+      if (diff > max_error) max_error = diff;
+    }
+
+    passed = (max_error < 1e-5f);
+
+    // Вывод первых и последних элементов
+    std::cout << "  [VectorAdd] Results (first 4):\n";
+    for (int i = 0; i < 4; ++i) {
+      std::cout << "    c[" << i << "] = " << host_a[i] << " + " << host_b[i]
+                << " = " << result[i] << " (expected " << (host_a[i] + host_b[i]) << ")\n";
+    }
+    std::cout << "  [VectorAdd] Results (last 2):\n";
+    for (size_t i = N - 2; i < N; ++i) {
+      std::cout << "    c[" << i << "] = " << host_a[i] << " + " << host_b[i]
+                << " = " << result[i] << " (expected " << (host_a[i] + host_b[i]) << ")\n";
+    }
+    std::cout << "  [VectorAdd] Max error: " << max_error << "\n";
+
+    // Cleanup GPU
+    hipFree(hip_c);
+    hipModuleUnload(module);
+
+  } catch (const std::exception& e) {
+    std::cout << "  [VectorAdd] Exception: " << e.what() << "\n";
+  }
+
+  cl_backend.Free(cl_buf_a);
+  cl_backend.Free(cl_buf_b);
+  rocm_backend.Cleanup();
+  cl_backend.Cleanup();
+  print_test("vector_add_zerocopy", passed);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Run all
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -623,6 +791,7 @@ inline void run() {
   test_svm_zerocopy();
   test_gpu_copy_kernel();
   test_force_strategy();
+  test_vector_add_zerocopy();
 
   std::cout << "========== ZeroCopy Bridge Tests Done ==========\n\n";
 }

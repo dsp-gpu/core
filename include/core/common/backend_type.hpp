@@ -13,7 +13,7 @@ namespace drv_gpu_lib {
  */
 enum class BackendType {
     OPENCL,       ///< OpenCL backend (реализовано)
-    ROCm,         ///< ROCm backend (будущее)
+    ROCm,         ///< ROCm/HIP backend (основной на Linux/AMD)
     OPENCLandROCm,   ///< OPENCLandROCm Compute backend
     AUTO          ///< Автоматический выбор
 };

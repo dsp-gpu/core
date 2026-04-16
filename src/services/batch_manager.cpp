@@ -16,6 +16,7 @@
 
 #include <core/services/batch_manager.hpp>
 #include <core/interface/i_backend.hpp>
+#include <core/logger/logger.hpp>
 
 #include <algorithm>
 #include <iostream>
@@ -92,8 +93,8 @@ size_t BatchManager::CalculateOptimalBatchSize(
         size_t fallback = std::max(
             static_cast<size_t>(total_items * 0.22),
             static_cast<size_t>(1));
-        std::cerr << "[BatchManager] WARNING: Cannot query GPU memory, "
-                  << "using fallback batch size: " << fallback << "\n";
+        DRVGPU_LOG_WARNING("BatchManager",
+            "Cannot query GPU memory, using fallback batch size: " + std::to_string(fallback));
         return fallback;
     }
 
@@ -103,9 +104,10 @@ size_t BatchManager::CalculateOptimalBatchSize(
     if (external_memory_bytes > 0) {
         if (external_memory_bytes >= available) {
             // Внешние данные занимают почти всю память — используем минимальный batch
-            std::cerr << "[BatchManager] WARNING: External memory ("
-                      << (external_memory_bytes / 1024 / 1024) << " MB) >= available ("
-                      << (available / 1024 / 1024) << " MB), using batch=1\n";
+            DRVGPU_LOG_WARNING("BatchManager",
+                "External memory (" + std::to_string(external_memory_bytes / 1024 / 1024) +
+                " MB) >= available (" + std::to_string(available / 1024 / 1024) +
+                " MB), using batch=1");
             return 1;
         }
         available -= external_memory_bytes;

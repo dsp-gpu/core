@@ -132,6 +132,14 @@ public:
   //   auto blas = static_cast<rocblas_handle>(ctx_->GetRocblasHandleRaw());
   //
   // Thread-safe: защита уникальным мьютексом per-GpuContext.
+  //
+  // ⚠️ OPT-IN: Требует -DENABLE_ROCBLAS=1 при сборке модуля-потребителя.
+  // core/CMakeLists.txt НЕ определяет ENABLE_ROCBLAS — это делает модуль,
+  // которому нужен rocBLAS (например, linalg):
+  //   find_package(rocblas REQUIRED)
+  //   target_compile_definitions(MyLib PRIVATE ENABLE_ROCBLAS=1)
+  //   target_link_libraries(MyLib PRIVATE roc::rocblas)
+  // Без ENABLE_ROCBLAS вызов GetRocblasHandleRaw() бросит runtime_error.
   // ═══════════════════════════════════════════════════════════════════════
   void* GetRocblasHandleRaw() const;
 

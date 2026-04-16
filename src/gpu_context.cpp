@@ -16,7 +16,9 @@
 #include <core/services/kernel_cache_service.hpp>
 #include <core/services/console_output.hpp>
 
+#ifdef ENABLE_ROCBLAS
 #include <rocblas/rocblas.h>
+#endif
 
 #include <cstring>
 #include <algorithm>
@@ -51,14 +53,14 @@ GpuContext::GpuContext(IBackend* backend,
   }
 
   // Determine GPU architecture and warp size from hipDeviceProp_t (авторитетный источник)
-  try {
-    auto* rocm_backend = static_cast<ROCmBackend*>(backend_);
-    arch_name_ = rocm_backend->GetCore().GetArchName();
-    warp_size_ = rocm_backend->GetCore().GetWarpSize();
-  } catch (...) {
-    arch_name_ = "";
-    warp_size_ = 32;
+  auto* rocm_backend = dynamic_cast<ROCmBackend*>(backend_);
+  if (!rocm_backend) {
+    throw std::runtime_error(
+        std::string("GpuContext[") + module_name_ +
+        "]: backend is not ROCmBackend (dynamic_cast failed)");
   }
+  arch_name_ = rocm_backend->GetCore().GetArchName();
+  warp_size_ = rocm_backend->GetCore().GetWarpSize();
 
   // Disk cache for compiled HSACO.
   // Per-arch подкаталог (gfx908/gfx1100/…) добавляется внутри KernelCacheService.
@@ -73,10 +75,12 @@ GpuContext::GpuContext(IBackend* backend,
 GpuContext::~GpuContext() {
   ReleaseShared();
   ReleaseModule();
+#ifdef ENABLE_ROCBLAS
   if (blas_handle_) {
     rocblas_destroy_handle(static_cast<rocblas_handle>(blas_handle_));
     blas_handle_ = nullptr;
   }
+#endif
 }
 
 GpuContext::GpuContext(GpuContext&& other) noexcept
@@ -101,10 +105,12 @@ GpuContext& GpuContext::operator=(GpuContext&& other) noexcept {
   if (this != &other) {
     ReleaseShared();
     ReleaseModule();
+#ifdef ENABLE_ROCBLAS
     if (blas_handle_) {
       rocblas_destroy_handle(static_cast<rocblas_handle>(blas_handle_));
       blas_handle_ = nullptr;
     }
+#endif
 
     backend_      = other.backend_;
     stream_       = other.stream_;
@@ -270,6 +276,7 @@ void GpuContext::ReleaseModule() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 void* GpuContext::GetRocblasHandleRaw() const {
+#ifdef ENABLE_ROCBLAS
   std::lock_guard<std::mutex> lock(*blas_mutex_);
   if (!blas_handle_) {
     // hipSetDevice обязателен: при 10-15 GPU текущий device в потоке
@@ -291,6 +298,11 @@ void* GpuContext::GetRocblasHandleRaw() const {
         backend_->GetDeviceIndex(), module_name_, "rocBLAS handle created");
   }
   return blas_handle_;
+#else
+  throw std::runtime_error(
+      std::string("GpuContext[") + module_name_ +
+      "]: rocBLAS not available (ENABLE_ROCBLAS not defined)");
+#endif
 }
 
 }  // namespace drv_gpu_lib

@@ -16,11 +16,11 @@
 
 #if ENABLE_ROCM
 
-#include "../../interface/i_backend.hpp"
-#include "../../common/backend_type.hpp"
-#include "../../common/gpu_device_info.hpp"
-#include "../../logger/logger.hpp"
-#include "../../memory/memory_manager.hpp"
+#include <core/interface/i_backend.hpp>
+#include <core/common/backend_type.hpp>
+#include <core/common/gpu_device_info.hpp>
+#include <core/logger/logger.hpp>
+#include <core/memory/memory_manager.hpp>
 
 #include "rocm_core.hpp"
 #include "stream_pool.hpp"

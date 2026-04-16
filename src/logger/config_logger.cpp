@@ -180,7 +180,8 @@ bool ConfigLogger::CreateLogDirectory() const {
         }
         return true;
     } catch (const std::filesystem::filesystem_error& e) {
-        // Логируем ошибку в stderr (логер может быть не инициализирован)
+        // BOOTSTRAP: std::cerr INTENTIONAL — Logger ещё не инициализирован,
+        // это код самого логера. DRVGPU_LOG_* здесь использовать нельзя.
         std::cerr << "[ConfigLogger] Failed to create log directory: " << e.what() << "\n";
         return false;
     }
@@ -269,6 +270,7 @@ bool ConfigLogger::CreateLogDirectoryForGPU(int gpu_id) const {
         }
         return true;
     } catch (const std::filesystem::filesystem_error& e) {
+        // BOOTSTRAP: std::cerr INTENTIONAL — Logger ещё не инициализирован
         std::cerr << "[ConfigLogger] Failed to create GPU log directory: " << e.what() << "\n";
         return false;
     }

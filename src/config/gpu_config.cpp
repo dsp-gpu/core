@@ -33,8 +33,9 @@
 #include <core/config/config_serializer_factory.hpp>
 #include <core/interface/i_config_reader.hpp>
 #include <core/interface/i_config_writer.hpp>
+#include <core/logger/logger.hpp>
 
-#include <iostream>
+#include <iostream>  // std::cout for Print() formatted output
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -107,6 +108,7 @@ bool GPUConfig::Load(const std::string& file_path) {
     // DIP: зависим от абстракции, фабрика скрывает что внутри nlohmann.
     auto reader = ConfigSerializerFactory::CreateJsonReader();
     if (!reader || !reader->LoadFromFile(file_path)) {
+        // BOOTSTRAP: std::cerr — Logger может вызвать ConfigLogger → GPUConfig (circular)
         std::cerr << "[GPUConfig] ERROR: Cannot load file: " << file_path << "\n";
         return false;
     }
@@ -124,6 +126,7 @@ bool GPUConfig::Load(const std::string& file_path) {
 
     // Защита: хотя бы один GPU
     if (new_data.gpus.empty()) {
+        // BOOTSTRAP: std::cerr — Logger ↔ GPUConfig circular dependency
         std::cerr << "[GPUConfig] WARNING: No GPUs in config, adding default\n";
         GPUConfigEntry default_gpu;
         default_gpu.id        = 0;
@@ -137,6 +140,7 @@ bool GPUConfig::Load(const std::string& file_path) {
     file_path_ = file_path;
     loaded_ = true;
 
+    // BOOTSTRAP: std::cout — Logger ↔ GPUConfig circular dependency
     std::cout << "[GPUConfig] Loaded " << data_.gpus.size()
               << " GPU config(s) from: " << file_path << "\n";
 
@@ -148,6 +152,7 @@ bool GPUConfig::LoadOrCreate(const std::string& file_path) {
         return Load(file_path);
     }
 
+    // BOOTSTRAP: std::cout — Logger ↔ GPUConfig circular dependency
     std::cout << "[GPUConfig] Config file not found, creating default: " << file_path << "\n";
 
     {
@@ -165,6 +170,7 @@ bool GPUConfig::Save(const std::string& file_path) {
 
     std::string path = file_path.empty() ? file_path_ : file_path;
     if (path.empty()) {
+        // BOOTSTRAP: std::cerr — Logger ↔ GPUConfig circular dependency
         std::cerr << "[GPUConfig] ERROR: No file path specified for Save()\n";
         return false;
     }
@@ -185,12 +191,14 @@ bool GPUConfig::Save(const std::string& file_path) {
     }
 
     if (!writer->SaveToFile(path)) {
+        // BOOTSTRAP: std::cerr — Logger ↔ GPUConfig circular dependency
         std::cerr << "[GPUConfig] ERROR: Cannot save file: " << path << "\n";
         return false;
     }
 
     file_path_ = path;
 
+    // BOOTSTRAP: std::cout — Logger ↔ GPUConfig circular dependency
     std::cout << "[GPUConfig] Saved " << data_.gpus.size()
               << " GPU config(s) to: " << path << "\n";
 
