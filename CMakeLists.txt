@@ -49,6 +49,7 @@ target_sources(DspCore PRIVATE
   src/memory/memory_manager.cpp
   # Services
   src/services/batch_manager.cpp
+  src/services/cache_dir_resolver.cpp
   src/services/kernel_cache_service.cpp
   src/services/filter_config_service.cpp
   src/services/gpu_profiler.cpp
